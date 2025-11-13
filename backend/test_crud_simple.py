@@ -22,22 +22,16 @@ test_products = [
         "sku": "WIDGET-001",
         "name": "Blue Widget",
         "description": "A high-quality blue widget",
-        "price": 29.99,
-        "active": True,
     },
     {
         "sku": "GADGET-001",
         "name": "Red Gadget",
         "description": "A shiny red gadget",
-        "price": 49.99,
-        "active": True,
     },
     {
         "sku": "TOOL-001",
         "name": "Power Tool",
         "description": "Professional grade power tool",
-        "price": 99.99,
-        "active": False,
     },
 ]
 
@@ -51,7 +45,7 @@ for product_data in test_products:
 
 # Test 2: Try creating duplicate SKU (should fail)
 print("\n2. Testing duplicate SKU detection...")
-duplicate = {"sku": "WIDGET-001", "name": "Different Widget", "price": 15.00}
+duplicate = {"sku": "WIDGET-001", "name": "Different Widget"}
 response = client.post("/products", json=duplicate)
 assert response.status_code == 409, f"Expected 409 conflict, got {response.status_code}"
 print(f"[PASS] Correctly rejected duplicate SKU: {response.json()['detail']}")
@@ -63,7 +57,7 @@ assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 data = response.json()
 print(f"[PASS] Retrieved product: {data['id']} - {data['name']}")
 assert data["sku"] == "WIDGET-001", "SKU mismatch"
-assert float(data["price"]) >= 29.98, "Price mismatch"
+assert data["description"] == "A high-quality blue widget", "Description mismatch"
 
 # Test 4: Get non-existent product
 print("\n4. Testing GET /products/{{id}} with invalid ID...")
@@ -82,7 +76,7 @@ assert data["offset"] == 0, "Default offset should be 0"
 assert len(data["items"]) == 3, f"Expected 3 items, got {len(data['items'])}"
 print(f"[PASS] Listed {data['total']} products (limit={data['limit']}, offset={data['offset']})")
 for item in data["items"]:
-    print(f"   - {item['id']}: {item['name']} (${item['price']})")
+    print(f"   - {item['id']}: {item['name']}")
 
 # Test 6: Pagination
 print("\n6. Testing pagination (limit=2, offset=1)...")
@@ -118,10 +112,7 @@ print("\n9. Testing filter by active status...")
 response = client.get("/products?active=false")
 assert response.status_code == 200
 data = response.json()
-assert data["total"] == 1, "Should find 1 inactive product"
-assert data["items"][0]["name"] == "Power Tool"
-assert data["items"][0]["active"] == False
-print(f"[PASS] Active filter works: found {data['total']} inactive product(s)")
+# (no active field in the simplified model)
 
 # Test 10: Filter by description
 print("\n10. Testing filter by description...")
@@ -134,26 +125,17 @@ print(f"[PASS] Description filter works: found {data['total']} product(s)")
 
 # Test 11: Update product
 print("\n11. Testing PUT /products/{{id}} - Update product...")
-update_data = {
-    "name": "Blue Widget Pro",
-    "price": 39.99,
-}
+update_data = {"name": "Blue Widget Pro"}
 response = client.put(f"/products/{created_ids[0]}", json=update_data)
 assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 data = response.json()
 assert data["name"] == "Blue Widget Pro", "Name should be updated"
-assert float(data["price"]) >= 39.98, "Price should be updated"
 assert data["sku"] == "WIDGET-001", "SKU should not change"
-print(f"[PASS] Updated product: {data['id']} - {data['name']} (${data['price']})")
+print(f"[PASS] Updated product: {data['id']} - {data['name']}")
 
 # Test 12: Partial update (update only active status)
 print("\n12. Testing partial update (active status)...")
-response = client.put(f"/products/{created_ids[2]}", json={"active": True})
-assert response.status_code == 200
-data = response.json()
-assert data["active"] == True, "Active status should be updated"
-assert data["name"] == "Power Tool", "Name should not change"
-print(f"[PASS] Updated active status: {data['id']} - active={data['active']}")
+# No active field to update in simplified model
 
 # Test 13: Update non-existent product
 print("\n13. Testing PUT /products/{{id}} with invalid ID...")
@@ -187,11 +169,11 @@ assert response.status_code == 404, f"Expected 404, got {response.status_code}"
 print("[PASS] Correctly returned 404")
 
 # Test 17: Combined filters
-print("\n17. Testing combined filters (active=true AND name contains 'widget')...")
-response = client.get("/products?active=true&name=widget")
+print("\n17. Testing combined filters (name contains 'widget')...")
+response = client.get("/products?name=widget")
 assert response.status_code == 200
 data = response.json()
-assert data["total"] == 1, "Should find 1 active product with 'widget' in name"
+assert data["total"] == 1, "Should find 1 product with 'widget' in name"
 assert data["items"][0]["name"] == "Blue Widget Pro"
 print(f"[PASS] Combined filters work: found {data['total']} product(s)")
 

@@ -23,7 +23,6 @@ async def list_products(
     offset: int = Query(0, ge=0, description="Number of items to skip"),
     sku: Optional[str] = Query(None, description="Filter by SKU (partial match)"),
     name: Optional[str] = Query(None, description="Filter by name (partial match)"),
-    active: Optional[bool] = Query(None, description="Filter by active status"),
     description: Optional[str] = Query(None, description="Filter by description (partial match)"),
     db: Session = Depends(get_db),
 ):
@@ -35,7 +34,6 @@ async def list_products(
     - `offset`: Number of items to skip (default: 0)
     - `sku`: Filter by SKU (partial match, case-insensitive)
     - `name`: Filter by name (partial match, case-insensitive)
-    - `active`: Filter by active status (true/false)
     - `description`: Filter by description (partial match, case-insensitive)
     """
     # Build filter query
@@ -46,8 +44,7 @@ async def list_products(
         filters.append(Product.sku.ilike(f"%{sku}%"))
     if name:
         filters.append(Product.name.ilike(f"%{name}%"))
-    if active is not None:
-        filters.append(Product.active == active)
+    # No active filter; model does not include `active` anymore
     if description:
         filters.append(Product.description.ilike(f"%{description}%"))
     
@@ -73,15 +70,10 @@ async def create_product(
     product: ProductCreate,
     db: Session = Depends(get_db),
 ):
-    """
-    Create a new product.
-    
-    **Request Body:**
-    - `sku`: Product SKU (required, max 255 chars)
-    - `name`: Product name (required, max 500 chars)
-    - `description`: Product description (optional)
-    - `price`: Product price (optional, must be >= 0)
-    - `active`: Whether product is active (default: true)
+    """Create a new product.
+
+    Request body fields:
+    - `sku`, `name` required; `description` optional.
     """
     # Check if SKU already exists (case-insensitive)
     sku_norm = product.sku.lower().strip()
@@ -99,8 +91,6 @@ async def create_product(
         sku_norm=sku_norm,
         name=product.name.strip(),
         description=product.description.strip() if product.description else None,
-        price=product.price,
-        active=product.active,
     )
     
     db.add(db_product)
@@ -147,8 +137,6 @@ async def update_product(
     **Request Body (all optional):**
     - `name`: Product name
     - `description`: Product description
-    - `price`: Product price
-    - `active`: Active status
     """
     db_product = db.query(Product).filter(Product.id == product_id).first()
     
@@ -163,10 +151,7 @@ async def update_product(
         db_product.name = product.name.strip()
     if product.description is not None:
         db_product.description = product.description.strip() if product.description else None
-    if product.price is not None:
-        db_product.price = product.price
-    if product.active is not None:
-        db_product.active = product.active
+    # price/active removed from model
     
     db.commit()
     db.refresh(db_product)
