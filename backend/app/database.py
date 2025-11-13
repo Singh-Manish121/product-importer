@@ -25,6 +25,9 @@ SessionLocal = sessionmaker(
 # Base class for models
 Base = declarative_base()
 
+# Import models after Base is defined (for lazy loading)
+from app.models import Product, Webhook, Job, JobStatus
+
 
 def get_db():
     """Dependency to get database session."""
