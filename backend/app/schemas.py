@@ -95,3 +95,38 @@ class ProductListResponse(BaseModel):
                 ],
             }
         }
+
+
+class WebhookCreate(BaseModel):
+    url: str
+    event_types: list[str]
+    enabled: bool = True
+
+
+class WebhookUpdate(BaseModel):
+    url: Optional[str]
+    event_types: Optional[list[str]]
+    enabled: Optional[bool]
+
+
+class WebhookResponse(BaseModel):
+    id: int
+    url: str
+    event_types: list[str]
+    enabled: bool
+    last_triggered_at: Optional[datetime]
+    last_response_status: Optional[int]
+    last_response_time_ms: Optional[int]
+    last_error: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WebhookListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: list[WebhookResponse]

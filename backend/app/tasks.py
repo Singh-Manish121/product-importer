@@ -3,7 +3,9 @@ import csv
 from pathlib import Path
 from app.celery_app import celery_app
 from app.database import SessionLocal
-from app.models import Product, Job, JobStatus
+from app.models import Product, Job, JobStatus, Webhook
+import time
+import httpx
 from datetime import datetime
 import json
 import redis
@@ -40,6 +42,70 @@ def publish_progress(job_id: str, step: str, processed: int, created: int, updat
         redis_client.publish(channel, json.dumps(message))
     except Exception:
         pass
+
+
+@celery_app.task(bind=True, name="app.tasks.deliver_webhook", max_retries=5)
+def deliver_webhook(self, webhook_id: int, event_type: str, payload: dict):
+    """Deliver a single webhook payload and record result on the Webhook row.
+
+    Retries on network errors or 5xx responses with exponential backoff.
+    """
+    db = SessionLocal()
+    try:
+        wh = db.query(Webhook).filter(Webhook.id == webhook_id).first()
+        if not wh or not wh.enabled:
+            return {"skipped": True}
+
+        url = wh.url
+        headers = {"Content-Type": "application/json"}
+        start = time.time()
+        try:
+            with httpx.Client(timeout=10) as client:
+                resp = client.post(url, json={"event": event_type, "data": payload}, headers=headers)
+        except Exception as exc:
+            # Retry on network errors
+            wh.last_error = str(exc)
+            wh.last_response_status = None
+            wh.last_triggered_at = datetime.utcnow()
+            db.commit()
+            # exponential backoff
+            retries = getattr(self.request, "retries", 0)
+            countdown = min(60, 2 ** retries)
+            raise self.retry(exc=exc, countdown=countdown)
+
+        elapsed_ms = int((time.time() - start) * 1000)
+        wh.last_triggered_at = datetime.utcnow()
+        wh.last_response_time_ms = elapsed_ms
+        wh.last_response_status = resp.status_code
+        wh.last_error = None if 200 <= resp.status_code < 300 else resp.text[:2000]
+        db.commit()
+
+        # If server error, retry
+        if 500 <= resp.status_code < 600:
+            retries = getattr(self.request, "retries", 0)
+            countdown = min(60, 2 ** retries)
+            raise self.retry(exc=Exception(f"Server error {resp.status_code}"), countdown=countdown)
+
+        return {"status": resp.status_code}
+    finally:
+        db.close()
+
+
+def schedule_webhook_event(event_type: str, payload: dict):
+    """Find enabled webhooks interested in this event and enqueue delivery tasks."""
+    db = SessionLocal()
+    try:
+        webhooks = db.query(Webhook).filter(Webhook.enabled == True).all()
+        for wh in webhooks:
+            events = wh.event_types or []
+            if event_type in events:
+                try:
+                    celery_app.send_task("app.tasks.deliver_webhook", args=[wh.id, event_type, payload])
+                except Exception:
+                    # best-effort, don't block processing on webhook enqueue failure
+                    pass
+    finally:
+        db.close()
 
 
 @celery_app.task(bind=True, name="app.tasks.import_csv")
@@ -137,6 +203,15 @@ def import_csv(self, job_id: str, filepath: str):
                     product.description = description
                     product.updated_at = datetime.utcnow()
                     updated_count += 1
+                    # schedule webhook for update
+                    try:
+                        schedule_webhook_event("product.updated", {
+                            "sku": product.sku,
+                            "name": product.name,
+                            "description": product.description,
+                        })
+                    except Exception:
+                        pass
                     continue
                 
                 existing = db.query(Product).filter(Product.sku_norm == sku_norm).first()
@@ -148,6 +223,16 @@ def import_csv(self, job_id: str, filepath: str):
                     existing.description = description
                     existing.updated_at = datetime.utcnow()
                     updated_count += 1
+                    # schedule webhook for update
+                    try:
+                        schedule_webhook_event("product.updated", {
+                            "id": existing.id,
+                            "sku": existing.sku,
+                            "name": existing.name,
+                            "description": existing.description,
+                        })
+                    except Exception:
+                        pass
                 else:
                     # Create
                     new_product = Product(
@@ -159,6 +244,15 @@ def import_csv(self, job_id: str, filepath: str):
                     db.add(new_product)
                     session_skus[sku_norm] = new_product  # Track for duplicate detection in batch
                     created_count += 1
+                    # schedule webhook for creation
+                    try:
+                        schedule_webhook_event("product.created", {
+                            "sku": new_product.sku,
+                            "name": new_product.name,
+                            "description": new_product.description,
+                        })
+                    except Exception:
+                        pass
                 
                 # Batch commit every N rows
                 if (idx + 1) % batch_size == 0:

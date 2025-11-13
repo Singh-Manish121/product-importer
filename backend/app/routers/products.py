@@ -13,6 +13,7 @@ from app.schemas import (
     ProductResponse,
     ProductListResponse,
 )
+from app.tasks import schedule_webhook_event
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -96,6 +97,16 @@ async def create_product(
     db.add(db_product)
     db.commit()
     db.refresh(db_product)
+    # Schedule webhook event for creation
+    try:
+        schedule_webhook_event("product.created", {
+            "id": db_product.id,
+            "sku": db_product.sku,
+            "name": db_product.name,
+            "description": db_product.description,
+        })
+    except Exception:
+        pass
     
     return db_product
 
@@ -155,6 +166,16 @@ async def update_product(
     
     db.commit()
     db.refresh(db_product)
+    # Schedule webhook event for update
+    try:
+        schedule_webhook_event("product.updated", {
+            "id": db_product.id,
+            "sku": db_product.sku,
+            "name": db_product.name,
+            "description": db_product.description,
+        })
+    except Exception:
+        pass
     
     return db_product
 
@@ -178,7 +199,19 @@ async def delete_product(
             detail=f"Product with ID {product_id} not found"
         )
     
+    # capture info for webhook before deletion
+    product_payload = {
+        "id": db_product.id,
+        "sku": db_product.sku,
+        "name": db_product.name,
+        "description": db_product.description,
+    }
     db.delete(db_product)
     db.commit()
+    # Schedule webhook for deletion
+    try:
+        schedule_webhook_event("product.deleted", product_payload)
+    except Exception:
+        pass
     
     return None
