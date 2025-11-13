@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.config import get_settings
 from app.database import Base, engine
-from app.routers import health
+from app.routers import health, products
 
 settings = get_settings()
 
@@ -39,6 +39,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health.router)
+app.include_router(products.router)
 
 
 @app.get("/")
