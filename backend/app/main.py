@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.config import get_settings
 from app.database import Base, engine
-from app.routers import health, products, uploads
+from app.routers import health, products, uploads, webhooks, jobs
 from app.routers import webhooks
 
 settings = get_settings()
@@ -43,6 +43,7 @@ app.include_router(health.router)
 app.include_router(products.router)
 app.include_router(uploads.router)
 app.include_router(webhooks.router)
+app.include_router(jobs.router)
 
 
 @app.get("/")
