@@ -9,7 +9,7 @@ A scalable CSV product import system with real-time progress tracking, product m
 - **Frontend**: React + Vite (to be created)
 - **Database**: PostgreSQL
 - **Message Broker**: Redis
-
+<!-- 
 ## Project Structure
 
 ```
@@ -41,7 +41,7 @@ product-importer/
 │   ├── package.json
 │   └── vite.config.js
 └── README.md
-```
+``` -->
 
 ## Prerequisites
 
@@ -209,7 +209,7 @@ To remove volumes (resets database):
 cd backend
 docker-compose down -v
 ```
-
+<!-- 
 ## Commits
 
 Each feature will be committed with a clear commit message:
@@ -238,4 +238,4 @@ We will implement the following features one-by-one:
 
 ---
 
-**Last Updated**: November 13, 2025
+**Last Updated**: November 13, 2025 -->
